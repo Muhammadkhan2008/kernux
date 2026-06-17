@@ -1,74 +1,238 @@
-# Kernux — Terminal Emulator for Android
+# Kernux - Terminal Emulator for Android
 
-A lightweight, native Android terminal emulator with VT100/ANSI support, built entirely from scratch without root privileges.
+Real Shell Environment. No Root. No Sandbox Bypass. Pure PTY Magic.
+
+[![Build APK](https://github.com/Muhammadkhan2008/kernux/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Muhammadkhan2008/kernux/actions/workflows/build-apk.yml)
+[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
+## What is Kernux?
+
+**Kernux** is a full-featured terminal emulator for Android that runs real shell commands via pseudo-terminal (PTY) without requiring root access.
+
+- Real /system/bin/sh shell executed via forkpty()
+- ANSI/VT100 terminal support (colors, cursor movement)
+- 16-color Kali/Linux aesthetic (green-on-black theme)
+- No root, no exploits - works on stock Android (minSdk 24)
+- Native performance - C PTY layer + Kotlin UI
+- Full keyboard input with arrow keys, Enter, Backspace, Tab
 
 ## Features
 
-- **Real Shell**: Runs `/system/bin/sh` via PTY (pseudo-terminal)
-- **ANSI Colors**: Full support for 16-color palette + bold text
-- **VT100 Escapes**: Cursor movement, erase, SGR codes
-- **Linux Feel**: Green Kali-style prompt, standard shell environment
-- **No Root**: Works on any Android device (minSdk 24)
-- **No Sandbox Bypass**: Uses Android's own shell and kernel
+| Feature | Status | Details |
+|---------|--------|---------|
+| Real Shell | OK | /system/bin/sh (mksh) via PTY |
+| ANSI Colors | OK | 16-color palette + bold text |
+| VT100 Escapes | OK | Cursor move, erase, SGR codes |
+| Linux Prompt | OK | Green kernux@localhost:~$ theme |
+| Keyboard | OK | Full input + arrow keys |
+| No Root | OK | Works on stock Android |
+| GitHub Actions | OK | Auto-build APK on push |
+| APK Download | OK | Pre-built in Releases |
 
-## Architecture
+## How It Works
 
 ```
-Native PTY Layer (C)
-  └─ forkpty() → pty master fd
-  └─ execve(/system/bin/sh)
-       ↓
-TerminalSession (Kotlin)
-  └─ Reader thread → TerminalEmulator
-       ↓
-TerminalEmulator (Parser)
-  └─ ANSI → screen grid
-       ↓
-TerminalView (UI)
-  └─ Draw grid + keyboard input
+User Input (Keyboard)
+    |
+    v
+TerminalView (UI Layer)
+    |
+    v
+TerminalSession (I/O Controller)
+    |
+    v
+NativePty (JNI Bridge)
+    |
+    v
+terminal_jni.c (C - PTY Operations)
+    |
+    v
+/system/bin/sh (Real Shell via PTY)
+    |
+    v
+Android Linux Kernel
 ```
-
-## Quick Start
-
-1. **Build**:
-   ```bash
-   chmod +x gradlew
-   ./gradlew assembleDebug
-   ```
-
-2. **Install**:
-   ```bash
-   adb install app/build/outputs/apk/debug/app-debug.apk
-   ```
-
-3. **Run**: Tap Kernux on phone → type commands
 
 ## Supported Commands
 
-Any shell builtin or binary in `/system/bin:/system/xbin`:
-- `ls`, `cd`, `pwd`, `echo`, `cat`, `grep`, `ps`, `uname`, etc.
-- Pipes: `ps | grep`, redirects: `echo test > /tmp/file`
-- Variables: `$PATH`, `$HOME`, etc.
+Any binary in /system/bin or /system/xbin:
 
-## What's NOT Included (Phase 2+)
+- Utilities: ls, cd, pwd, echo, cat, grep, find, ps, top
+- Text: sed, awk, cut, sort, uniq  
+- System: uname, id, whoami, date, uptime
+- Network: ping, netstat, ifconfig
+- Shell: pipes |, redirects >, <, &&, ||
 
-- Additional packages (`bash`, `python`, `nano`, etc.) — requires cross-compilation
-- `apt`/package manager — bootstrapping userland
-- Filesystem mods — real `/usr`, `/bin` require root
+Example commands:
+```bash
+ls -la
+pwd
+echo $HOME
+ps | grep shell
+cat /proc/cpuinfo
+```
 
-## Building
+## Building from Source
 
-Requirements:
-- Android SDK (API 34+)
-- Android NDK (for native C code)
+### Requirements
+
+- Android Studio 2023.1+
 - Java 17+
+- Android SDK API 34
+- Android NDK
+- CMake 3.22+
 
-GitHub Actions builds and publishes APK on every push to `main`.
+### Build Steps
+
+```bash
+git clone https://github.com/Muhammadkhan2008/kernux.git
+cd kernux
+./gradlew assembleDebug
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+Or open in Android Studio and click Run.
+
+## Installation
+
+### From Releases (Easiest)
+
+1. Download kernux-debug-apk.apk from Releases
+2. adb install kernux-debug-apk.apk
+
+### From Android Studio
+
+1. Clone repo
+2. Plug in phone (USB debugging ON)
+3. Click green Run button
+4. Select device
+
+## Architecture Details
+
+### Native PTY Layer (C)
+- forkpty() creates pseudo-terminal pair
+- execve(/system/bin/sh) runs shell in child
+- read/write operations on PTY master fd
+
+### Terminal Emulator (Kotlin)
+- Parses ANSI/VT100 escape codes
+- Maintains screen grid with colors
+- Supports cursor movement, erase, attributes
+
+### UI Layer (Android)
+- Canvas-based high-performance rendering
+- Keyboard input capture
+- Touch to show/hide soft keyboard
+
+### JNI Bridge
+- Kotlin external functions linked to C symbols
+- Type marshalling between Java/C
+- Thread-safe PTY operations
+
+## Security
+
+- No Root: Uses Android's PTY subsystem (kernel feature)
+- Sandbox Intact: Runs in app's /data/data directory
+- No Exploitation: targetSdk 28 respects W^X restrictions
+- Open Source: All code visible, no native blobs
+
+### Limitations
+
+- Cannot access /system or /data outside app
+- Cannot run as root (unless device rooted)
+- Cannot modify system files
+- Additional packages need Phase 2 bootstrap
+
+## Roadmap
+
+### Phase 1 (Current) - DONE
+- Native PTY layer
+- ANSI terminal emulator  
+- Keyboard input
+- GitHub Actions CI/CD
+
+### Phase 2 (Planned)
+- Cross-compile bash, coreutils
+- Linux userland bootstrap
+- Package manager
+- Emoji support
+
+### Phase 3 (Future)
+- Multi-session tabs
+- Clipboard integration
+- SSH support
+- Custom themes
+
+## FAQ
+
+Q: Why no root needed?
+A: Android's PTY subsystem is a kernel feature already available.
+
+Q: Can I run bash/python?
+A: Not yet - Phase 2 will cross-compile ARM binaries.
+
+Q: Compatible with which Android versions?
+A: minSdk 24 (Android 7.0+), works on modern devices.
+
+Q: Production ready?
+A: Great for dev/learning. Not for untrusted scripts.
+
+Q: Comparison to Termux?
+A: Termux has huge bootstrap + packages. Kernux is minimal, pure PTY, learning-focused.
+
+## Project Stats
+
+```
+Lines of Code:
+- Kotlin: ~600 (UI + emulator)
+- C: ~130 (PTY layer)
+- Config: ~150 (Gradle, CMake)
+- Total: ~880 LoC
+
+Architecture:
+- Minimal dependencies
+- Native performance
+- Modern Android APIs
+```
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Native | C (POSIX) |
+| JNI | Kotlin |
+| Parser | Kotlin |
+| UI | Android Canvas |
+| Build | Gradle + CMake |
+| CI/CD | GitHub Actions |
+
+## Contributing
+
+1. Fork repo
+2. Create feature branch
+3. Commit changes
+4. Push to branch
+5. Open Pull Request
+
+## Issues & Bugs
+
+Found a bug? Open an Issue with:
+- Device model & Android version
+- Steps to reproduce
+- Terminal output/screenshots
 
 ## License
 
-GPLv3 (inspired by Termux architecture)
+Kernux is licensed under GPLv3 - see LICENSE file.
+
+Inspired by Termux architecture but built from scratch.
 
 ## Author
 
-Built with ❤️ by Kernux Team
+Built with love by Muhammadkhan2008
+
+Give it a star if you love terminal emulators!
+
+- GitHub: https://github.com/Muhammadkhan2008/kernux
+- Issues: https://github.com/Muhammadkhan2008/kernux/issues
+- Releases: https://github.com/Muhammadkhan2008/kernux/releases
