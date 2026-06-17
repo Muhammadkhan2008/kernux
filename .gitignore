@@ -1,0 +1,27 @@
+# Android
+.gradle/
+.idea/
+*.iml
+*.apk
+*.aab
+build/
+local.properties
+captures/
+.DS_Store
+
+# Gradle
+.gradle
+gradle-app.setting
+!gradle-wrapper.jar
+gradle-wrapper.properties.lock
+
+# Android Studio
+*.log
+*.swp
+
+# Generated
+.cxx/
+cmake_build/
+
+# Kotlin
+*.kt.bak
