@@ -31,11 +31,13 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/tools/bin/sdkmanager" --licenses || true
       
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-      
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.2'
+
       - name: Build APK with Gradle
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug
       
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
