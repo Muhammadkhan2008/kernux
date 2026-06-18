@@ -23,6 +23,7 @@ class TerminalView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private var session: TerminalSession? = null
+    var sessionManager: SessionManager? = null
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bgPaint = Paint()
     private val cursorPaint = Paint()
