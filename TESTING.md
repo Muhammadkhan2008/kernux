@@ -289,3 +289,157 @@ Found a bug? Report on GitHub with:
 Good luck testing! Let us know results on GitHub. 
 
 For issues/feedback: https://github.com/Muhammadkhan2008/kernux/issues
+
+---
+
+## Known Issues (Phase 1 Limitations)
+
+### Issue 1: No Package Manager
+
+**Symptom:**
+```bash
+pkg install curl
+apt-get install vim
+# Command not found
+```
+
+**Why:**
+- No package manager included in Phase 1
+- Need cross-compilation for ARM
+- Requires package repository
+
+**Workaround:**
+- None (Phase 2 feature)
+- Track in PROGRESS.txt
+
+**Status:** Expected in Phase 2
+
+---
+
+### Issue 2: Incomplete PATH
+
+**Symptom:**
+```bash
+echo $PATH
+# Output: /system/bin:/system/xbin
+
+ls /usr/bin
+# (empty)
+
+which curl
+# not found
+```
+
+**Why:**
+- PATH doesn't include /usr/bin
+- /usr/bin exists but empty
+- No custom binaries installed yet
+
+**Workaround:**
+```bash
+# Temporary fix
+export PATH=/system/bin:/system/xbin:$PATH
+
+# Check what's available
+ls /system/bin | head -20
+```
+
+**Status:** Will be fixed in Phase 1.5 (quick update)
+
+---
+
+### Issue 3: Missing Network Tools
+
+**Symptom:**
+```bash
+ping 8.8.8.8
+ifconfig
+curl https://example.com
+# Command not found
+```
+
+**Why:**
+- Network tools not in /system/bin
+- Need cross-compilation
+- Not included in base image
+
+**Workaround:**
+- Use available tools (cat /proc/net/...)
+- Network permission missing from manifest
+
+**Status:** Expected in Phase 2
+
+---
+
+### Issue 4: Limited Utilities
+
+**Symptom:**
+```bash
+vim file.txt
+nano file.txt
+grep -r "text" /data
+# Some commands not found
+```
+
+**Available Now:**
+- ls, cat, echo, grep, ps, uname, date
+- touch, rm, mkdir, cd, pwd
+- sed, awk, find, sort, uniq
+
+**Missing:**
+- vim, nano (editors)
+- curl, wget (downloaders)
+- git (version control)
+- gcc, make (development)
+- python, node (interpreters)
+
+**Workaround:**
+- Use available tools only
+- Wait for Phase 2
+
+**Status:** Phase 2 will add these
+
+---
+
+## How to Report Issues
+
+Found a bug or issue? Report on GitHub:
+
+1. Go to: https://github.com/Muhammadkhan2008/kernux/issues
+2. Click "New Issue"
+3. Include:
+   - Device: (adb shell getprop ro.product.model)
+   - Android: (adb shell getprop ro.build.version.release)
+   - Command: (what you ran)
+   - Error: (what you got)
+   - Expected: (what should happen)
+4. Attach logcat if crash:
+   ```bash
+   adb logcat -d | grep kernux > logcat.txt
+   ```
+
+---
+
+## Known Limitations Summary
+
+Phase 1 (Current):
+✓ Shell works
+✓ Basic commands
+✓ Colors work
+✗ No package manager
+✗ Limited utilities
+✗ No network tools
+
+Phase 1.5 (Planned - 1-2 hours):
+- Add network permissions
+- Fix PATH variable
+- Init script
+
+Phase 2 (Planned - 4-6 weeks):
++ Package manager
++ Network tools
++ Modern utilities
++ Development tools
+
+For details, see ISSUES_AND_FIXES.md
+

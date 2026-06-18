@@ -287,3 +287,60 @@ Thank you for testing Kernux!
 Last Updated: June 18, 2026
 License: GPLv3
 =================================================================================
+
+================================================================================
+                       DISCOVERED ISSUES (Testing)
+================================================================================
+
+From actual testing on Android, these issues found:
+
+ISSUE 1: No Package Manager
+Status: CONFIRMED
+Severity: HIGH (blocks Phase 2)
+Details: pkg, apt, opkg not found
+Impact: Cannot install packages
+
+ISSUE 2: Incomplete PATH
+Status: CONFIRMED
+Severity: MEDIUM
+Details: PATH missing /usr/bin, /usr/local/bin
+Impact: Custom tools won't be found
+
+ISSUE 3: Missing Core Utilities
+Status: CONFIRMED
+Severity: MEDIUM
+Details: ifconfig, ping, curl, vim not available
+Impact: Limited functionality
+
+ISSUE 4: No Network Stack
+Status: CONFIRMED
+Severity: MEDIUM
+Details: Network tools not installed, permissions missing
+Impact: Cannot access network
+
+See ISSUES_AND_FIXES.md for detailed analysis & solutions
+
+================================================================================
+                       PHASE 1.5 QUICK FIXES (1-2 hours)
+================================================================================
+
+Before Phase 2, can do quick fixes:
+
+[  ] Add Network Permissions to AndroidManifest.xml
+     - android.permission.INTERNET
+     - android.permission.ACCESS_NETWORK_STATE
+     - android.permission.CHANGE_NETWORK_STATE
+
+[  ] Fix PATH in MainActivity.kt
+     From: /system/bin:/system/xbin
+     To:   /data/.../usr/bin:/system/bin:/system/xbin
+
+[  ] Create init script (~/.kernux_init)
+     - Export proper PATH
+     - Create directories
+     - Add aliases
+
+Effort: 1-2 hours
+Impact: Better foundation for Phase 2
+
+================================================================================
