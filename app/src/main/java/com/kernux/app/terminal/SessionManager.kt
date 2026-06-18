@@ -2,65 +2,68 @@ package com.kernux.app.terminal
 
 import java.io.File
 
-class SessionManager {
-    private val sessions = mutableMapOf<Int, TerminalSession>()
+/**
+ * Session manager - multiple terminal sessions handle karta hai.
+ * PackageManager bhi yahan inject hota hai taake
+ * TerminalSession ke andar 'pkg' command intercept ho sake.
+ */
+class SessionManager(val filesDir: File) {
+
+    private val sessions      = mutableMapOf<Int, TerminalSession>()
     private var nextSessionId = 1
     var currentSessionId: Int = -1
         private set
 
-    fun createSession(filesDir: File): Int {
-        val sessionId = nextSessionId++
-        val home = filesDir.absolutePath
-        val prefix = File(filesDir, "usr").absolutePath
+    // Shared package manager - sab sessions share karte hain
+    val pkgManager = PackageManagerPhase2(filesDir)
 
-        val esc = ""
-        val ps1 = "${esc}[1;32mkernux@localhost${esc}[0m:${esc}[1;34m\$PWD${esc}[0m\$ "
+    fun createSession(filesDir: File = this.filesDir): Int {
+        val sessionId = nextSessionId++
+        val home   = filesDir.absolutePath
+        val prefix = File(filesDir, "usr").absolutePath
+        val binDir = File(filesDir, "usr/bin").absolutePath
 
         val env = arrayOf(
             "HOME=$home",
             "PREFIX=$prefix",
-            "PATH=$prefix/bin:$prefix/usr/bin:$prefix/usr/local/bin:/system/bin:/system/xbin",
+            "PATH=$binDir:$prefix/local/bin:/system/bin:/system/xbin:/system/bin/sh",
             "TERM=xterm-256color",
             "LANG=en_US.UTF-8",
-            "PS1=$ps1",
+            "SHELL=/system/bin/sh",
+            "USER=kernux",
+            "LOGNAME=kernux",
+            "PS1=[1;32mkernux@android[0m:[1;34m\$PWD[0m\$ ",
             "PS2=> "
         )
 
         val shell = "/system/bin/sh"
-        val args = arrayOf(shell, "-i")
+        val args  = arrayOf(shell, "-i")
 
         val session = TerminalSession(shell, args, env, home)
-        sessions[sessionId] = session
 
-        if (currentSessionId == -1) {
-            currentSessionId = sessionId
+        // pkg command output → session ke terminal mein print hoga
+        pkgManager.onOutput = { text ->
+            session.write(("\r\n$text").toByteArray(Charsets.UTF_8))
         }
 
+        sessions[sessionId] = session
+        if (currentSessionId == -1) currentSessionId = sessionId
         return sessionId
     }
 
-    fun getSession(sessionId: Int): TerminalSession? = sessions[sessionId]
+    fun getSession(id: Int):  TerminalSession?  = sessions[id]
+    fun getAllSessions():      List<Int>         = sessions.keys.toList()
+    fun getSessionCount():    Int               = sessions.size
 
-    fun switchSession(sessionId: Int): Boolean {
-        return if (sessions.containsKey(sessionId)) {
-            currentSessionId = sessionId
-            true
-        } else {
-            false
-        }
+    fun switchSession(id: Int): Boolean {
+        return if (sessions.containsKey(id)) { currentSessionId = id; true } else false
     }
 
-    fun closeSession(sessionId: Int) {
-        sessions[sessionId]?.close()
-        sessions.remove(sessionId)
-        if (currentSessionId == sessionId) {
-            currentSessionId = sessions.keys.firstOrNull() ?: -1
-        }
+    fun closeSession(id: Int) {
+        sessions[id]?.close()
+        sessions.remove(id)
+        if (currentSessionId == id) currentSessionId = sessions.keys.firstOrNull() ?: -1
     }
-
-    fun getAllSessions(): List<Int> = sessions.keys.toList()
-
-    fun getSessionCount(): Int = sessions.size
 
     fun closeAll() {
         sessions.values.forEach { it.close() }

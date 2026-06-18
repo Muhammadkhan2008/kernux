@@ -24,6 +24,12 @@ class TerminalView @JvmOverloads constructor(
 
     private var session: TerminalSession? = null
     var sessionManager: SessionManager? = null
+
+    /** MainActivity sets this to intercept 'pkg ...' commands */
+    var onPkgCommand: ((String) -> Unit)? = null
+
+    // Buffer to collect typed input (to detect 'pkg ...' commands)
+    private val inputBuffer = StringBuilder()
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bgPaint = Paint()
     private val cursorPaint = Paint()
@@ -121,7 +127,10 @@ class TerminalView @JvmOverloads constructor(
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
         return object : BaseInputConnection(this, false) {
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                text?.let { session?.write(it.toString()) }
+                text?.let {
+                    inputBuffer.append(it)   // track typed chars for pkg detection
+                    session?.write(it.toString())
+                }
                 return true
             }
             override fun sendKeyEvent(event: KeyEvent?): Boolean {
@@ -145,16 +154,37 @@ class TerminalView @JvmOverloads constructor(
     private fun handleKey(event: KeyEvent): Boolean {
         val s = session ?: return false
         when (event.keyCode) {
-            KeyEvent.KEYCODE_ENTER -> { s.write("\r"); return true }
-            KeyEvent.KEYCODE_DEL -> { s.write(""); return true }
-            KeyEvent.KEYCODE_DPAD_UP -> { s.write("[A"); return true }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { s.write("[B"); return true }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> { s.write("[C"); return true }
-            KeyEvent.KEYCODE_DPAD_LEFT -> { s.write("[D"); return true }
-            KeyEvent.KEYCODE_TAB -> { s.write("\t"); return true }
+            KeyEvent.KEYCODE_ENTER -> {
+                val cmd = inputBuffer.toString().trim()
+                inputBuffer.clear()
+                if (cmd.startsWith("pkg") && onPkgCommand != null) {
+                    s.write("
+")
+                    onPkgCommand?.invoke(cmd)
+                } else {
+                    s.write("
+")
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_DEL -> {
+                if (inputBuffer.isNotEmpty()) inputBuffer.deleteCharAt(inputBuffer.length - 1)
+                s.write("")
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_UP    -> { s.write("[A"); return true }
+            KeyEvent.KEYCODE_DPAD_DOWN  -> { s.write("[B"); return true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { s.write("[C"); return true }
+            KeyEvent.KEYCODE_DPAD_LEFT  -> { s.write("[D"); return true }
+            KeyEvent.KEYCODE_TAB        -> { s.write("	"); return true }
         }
         val ch = event.unicodeChar
-        if (ch != 0) { s.write(ch.toChar().toString()); return true }
+        if (ch != 0) {
+            val c = ch.toChar()
+            inputBuffer.append(c)
+            s.write(c.toString())
+            return true
+        }
         return false
     }
 

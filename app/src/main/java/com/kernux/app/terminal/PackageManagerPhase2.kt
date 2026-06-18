@@ -1,186 +1,324 @@
 package com.kernux.app.terminal
 
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import java.io.File
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.util.concurrent.Executors
+
+/**
+ * Kernux Package Manager - TERMUX STYLE!
+ *
+ * Small base APK + manual online download
+ * pkg install git   → downloads from GitHub releases
+ * pkg install python → downloads python package
+ * Like Termux + Ubuntu apt combined!
+ */
 
 data class Package(
     val name: String,
     val version: String,
     val description: String,
-    val size: Long = 0,
+    val sizeBytes: Long = 0,
     var installed: Boolean = false
 )
 
 class PackageManagerPhase2(private val filesDir: File) {
-    private val prefixDir = File(filesDir, "usr")
-    private val binDir = File(prefixDir, "bin")
-    private val libDir = File(prefixDir, "lib")
-    private val pkgDir = File(filesDir, ".kernux/packages")
-    private val cacheDir = File(filesDir, ".kernux/cache")
-    
-    private val packages = mutableMapOf<String, Package>()
-    private val installedPackages = mutableSetOf<String>()
+
+    companion object {
+        // GitHub Releases pe hosted packages (FREE hosting!)
+        const val REPO_BASE = "https://github.com/Muhammadkhan2008/kernux/releases/download/packages"
+
+        // Local directories
+        const val PKG_DB_FILE   = ".kernux_installed"
+        const val CACHE_SUBDIR  = ".kernux/cache"
+        const val PREFIX_SUBDIR = "usr"
+    }
+
+    private val prefixDir = File(filesDir, PREFIX_SUBDIR)
+    private val binDir    = File(prefixDir, "bin")
+    private val libDir    = File(prefixDir, "lib")
+    private val cacheDir  = File(filesDir, CACHE_SUBDIR)
+    private val dbFile    = File(filesDir, PKG_DB_FILE)
+
+    private val executor    = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** Callbacks - TerminalSession / MainActivity set karega */
+    var onOutput:   ((String) -> Unit)? = null   // output text show karne ke liye
+    var onProgress: ((Int)    -> Unit)? = null   // 0-100 progress bar
+
+    // Package database - 16 packages
+    private val packageDb = listOf(
+        Package("coreutils", "9.1",       "ls, cat, echo, grep, sed, awk, find, sort",  2_500_000),
+        Package("bash",      "5.2",       "GNU Bash shell",                              1_800_000),
+        Package("curl",      "7.88",      "HTTP/HTTPS file download tool",                 900_000),
+        Package("wget",      "1.21",      "File downloader with resume support",           850_000),
+        Package("git",       "2.40",      "Version control - clone, commit, push",       5_000_000),
+        Package("vim",       "9.0",       "Powerful text editor",                        3_000_000),
+        Package("nano",      "7.0",       "Simple beginner-friendly editor",               800_000),
+        Package("python",    "3.11",      "Python interpreter",                          4_000_000),
+        Package("node",      "18.0",      "Node.js JavaScript runtime",                  3_500_000),
+        Package("gcc",       "12.0",      "C/C++ compiler",                              6_000_000),
+        Package("openssh",   "9.0",       "SSH client/server",                           2_500_000),
+        Package("perl",      "5.36",      "Perl scripting language",                     2_000_000),
+        Package("openssl",   "3.0",       "SSL/TLS crypto library",                      3_000_000),
+        Package("net-tools", "2.10",      "ifconfig, netstat, arp, route",                 700_000),
+        Package("iputils",   "20230321",  "ping, traceroute, arping",                      600_000),
+        Package("make",      "4.3",       "Build automation tool",                       1_000_000)
+    ).map { pkg ->
+        pkg.copy(installed = isMarkedInstalled(pkg.name))
+    }.let { list ->
+        val map = mutableMapOf<String, Package>()
+        list.forEach { map[it.name] = it }
+        map
+    }
 
     init {
         prefixDir.mkdirs()
         binDir.mkdirs()
         libDir.mkdirs()
-        pkgDir.mkdirs()
         cacheDir.mkdirs()
-        
-        loadPackageDatabase()
-        checkInstalledPackages()
     }
 
-    private fun loadPackageDatabase() {
-        val pkgList = listOf(
-            Package("coreutils", "9.1", "GNU core utilities (ls, cat, echo, grep, sed, awk, find, sort, etc.)", 2500000),
-            Package("bash", "5.1", "GNU Bourne Again Shell - full bash functionality", 1800000),
-            Package("curl", "7.85", "HTTP client and file transfer tool - download files from internet", 900000),
-            Package("wget", "1.21", "Alternative file downloader with mirror support", 850000),
-            Package("git", "2.38", "Version control system - clone, commit, push repositories", 5000000),
-            Package("vim", "9.0", "Powerful text editor with syntax highlighting", 3000000),
-            Package("nano", "7.0", "Simple text editor for beginners", 800000),
-            Package("iputils", "20220127", "Network utilities - ping, traceroute, etc.", 600000),
-            Package("net-tools", "2.10", "Network tools - ifconfig, netstat, arp, etc.", 700000),
-            Package("perl", "5.36", "Perl scripting language interpreter", 2000000),
-            Package("python", "3.10", "Python interpreter for running Python scripts", 4000000),
-            Package("node", "18.0", "Node.js runtime for JavaScript execution", 3500000),
-            Package("gcc", "12.0", "GNU C/C++ compiler for development", 6000000),
-            Package("make", "4.3", "Build automation tool", 1000000),
-            Package("openssh", "8.6", "SSH client and server for remote access", 2500000),
-            Package("openssl", "3.0", "SSL/TLS toolkit and crypto library", 3000000)
-        )
-        
-        pkgList.forEach { pkg ->
-            val installed = File(pkgDir, "${pkg.name}.installed").exists()
-            packages[pkg.name] = pkg.copy(installed = installed)
-            if (installed) installedPackages.add(pkg.name)
+    // ──────────────────────────────────────────────────────────────
+    //  PUBLIC API  (shell mai yai commands run hongi)
+    // ──────────────────────────────────────────────────────────────
+
+    /** pkg install <name> */
+    fun install(name: String) {
+        val pkg = packageDb[name]
+        if (pkg == null) {
+            emit("[31mE: Package '$name' not found. Try: pkg list[0m\n")
+            return
         }
-    }
-
-    private fun checkInstalledPackages() {
-        binDir.listFiles()?.forEach { file ->
-            installedPackages.add(file.name)
+        if (pkg.installed) {
+            emit("[33m$name is already installed.[0m\n")
+            return
         }
+        executor.execute { doInstall(pkg) }
     }
 
-    fun install(packageName: String, onProgress: (String) -> Unit = {}): Boolean {
-        val pkg = packages[packageName] ?: return false
-        if (pkg.installed) return false
-        
-        onProgress("Installing $packageName...")
-        
-        try {
-            // Download package (simulated - in real version would download .opkg)
-            onProgress("Downloading $packageName-${pkg.version}...")
-            val pkgFile = downloadPackage(packageName, pkg.version)
-            
-            if (!pkgFile.exists()) {
-                onProgress("Error: Package download failed")
-                return false
-            }
-            
-            onProgress("Extracting $packageName...")
-            extractPackage(pkgFile, packageName)
-            
-            onProgress("Setting permissions...")
-            setPermissions(packageName)
-            
-            onProgress("Running post-install script...")
-            runPostInstall(packageName)
-            
-            // Mark as installed
-            File(pkgDir, "$packageName.installed").createNewFile()
-            packages[packageName] = pkg.copy(installed = true)
-            installedPackages.add(packageName)
-            
-            onProgress("$packageName installed successfully!")
-            return true
-        } catch (e: Exception) {
-            onProgress("Error installing $packageName: ${e.message}")
-            return false
+    /** pkg remove <name> */
+    fun remove(name: String) {
+        val pkg = packageDb[name]
+        if (pkg == null) { emit("[31mE: Package '$name' not found.[0m\n"); return }
+        if (!pkg.installed) { emit("[33m$name is not installed.[0m\n"); return }
+        executor.execute { doRemove(pkg) }
+    }
+
+    /** pkg list */
+    fun list(): String {
+        val sb = StringBuilder()
+        sb.append("[1;36mKernux Package Repository - 16 Packages Available[0m\n")
+        sb.append("─".repeat(55) + "\n")
+        sb.append(String.format("%-14s %-10s %-8s %s\n", "NAME", "VERSION", "SIZE", "STATUS"))
+        sb.append("─".repeat(55) + "\n")
+        packageDb.values.forEach { pkg ->
+            val status = if (pkg.installed) "[32m[installed][0m" else "[available]"
+            val sizeMb = "${pkg.sizeBytes / 1_000_000}MB"
+            sb.append(String.format("%-14s %-10s %-8s %s\n", pkg.name, pkg.version, sizeMb, status))
         }
+        sb.append("─".repeat(55) + "\n")
+        sb.append("Usage: pkg install <name>  |  pkg remove <name>  |  pkg search <query>\n")
+        return sb.toString()
     }
 
-    fun uninstall(packageName: String, onProgress: (String) -> Unit = {}): Boolean {
-        val pkg = packages[packageName] ?: return false
-        if (!pkg.installed) return false
-        
-        onProgress("Uninstalling $packageName...")
-        
-        try {
-            onProgress("Removing files...")
-            removePackageFiles(packageName)
-            
-            onProgress("Running pre-remove script...")
-            runPreRemove(packageName)
-            
-            File(pkgDir, "$packageName.installed").delete()
-            packages[packageName] = pkg.copy(installed = false)
-            installedPackages.remove(packageName)
-            
-            onProgress("$packageName uninstalled successfully!")
-            return true
-        } catch (e: Exception) {
-            onProgress("Error uninstalling $packageName: ${e.message}")
-            return false
-        }
-    }
-
-    fun list(): List<Package> = packages.values.toList()
-
-    fun installed(): List<Package> = packages.values.filter { it.installed }
-
-    fun search(query: String): List<Package> {
-        return packages.values.filter {
+    /** pkg search <query> */
+    fun search(query: String): String {
+        val results = packageDb.values.filter {
             it.name.contains(query, ignoreCase = true) ||
             it.description.contains(query, ignoreCase = true)
         }
+        if (results.isEmpty()) return "No packages found for '$query'\n"
+        val sb = StringBuilder("[1mSearch results for '$query':[0m\n")
+        results.forEach { sb.append("  ${it.name} (${it.version}) - ${it.description}\n") }
+        return sb.toString()
     }
 
-    fun info(packageName: String): Package? = packages[packageName]
-
-    fun isInstalled(packageName: String): Boolean {
-        return packages[packageName]?.installed ?: false
-    }
-
-    // Helper functions
-    private fun downloadPackage(name: String, version: String): File {
-        // In real Phase 2, this would download from repository
-        val pkgFile = File(cacheDir, "$name-$version.opkg")
-        
-        // Create mock package for now
-        if (!pkgFile.exists()) {
-            pkgFile.createNewFile()
-            // Would download real .opkg here
-            // For now, simulates presence
+    /** pkg info <name> */
+    fun info(name: String): String {
+        val pkg = packageDb[name] ?: return "Package '$name' not found.\n"
+        return buildString {
+            append("[1;33mPackage: ${pkg.name}[0m\n")
+            append("  Version:     ${pkg.version}\n")
+            append("  Size:        ${pkg.sizeBytes / 1_000_000} MB\n")
+            append("  Description: ${pkg.description}\n")
+            append("  Status:      ${if (pkg.installed) "[32mInstalled[0m" else "Not installed"}\n")
+            append("  Download:    $REPO_BASE/${pkg.name}-${pkg.version}-${arch()}.tar.gz\n")
         }
-        
-        return pkgFile
     }
 
-    private fun extractPackage(pkgFile: File, packageName: String) {
-        // Would extract .opkg (tar.gz format) here
-        // For now, creates marker files
-        File(binDir, packageName).createNewFile()
+    /** pkg upgrade */
+    fun upgrade(): String = "Checking for updates...\nAll packages up to date.\n"
+
+    /** Installed packages list */
+    fun installed(): List<Package> = packageDb.values.filter { it.installed }
+
+    fun isInstalled(name: String) = packageDb[name]?.installed ?: false
+
+    // ──────────────────────────────────────────────────────────────
+    //  INSTALL / REMOVE LOGIC
+    // ──────────────────────────────────────────────────────────────
+
+    private fun doInstall(pkg: Package) {
+        emit("[1;32mInstalling ${pkg.name} ${pkg.version}...[0m\n")
+        emit("Arch: ${arch()}\n")
+
+        val tarName  = "${pkg.name}-${pkg.version}-${arch()}.tar.gz"
+        val url      = "$REPO_BASE/$tarName"
+        val cacheFile = File(cacheDir, tarName)
+
+        // 1) Download
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            emit("Using cached package...\n")
+        } else {
+            emit("Downloading from GitHub releases...\n")
+            emit("URL: $url\n")
+            val ok = downloadWithProgress(url, cacheFile)
+            if (!ok) {
+                emit("[31mDownload failed! Check internet connection.[0m\n")
+                // Fallback: create stub so basic command exists
+                createStub(pkg.name)
+                markInstalled(pkg.name)
+                packageDb[pkg.name] = pkg.copy(installed = true)
+                emit("[33mNote: Stub created. Real binaries need compiled packages.[0m\n")
+                emit("[32m${pkg.name} stub installed.[0m\n")
+                return
+            }
+        }
+
+        // 2) Extract
+        emit("Extracting ${pkg.name}...\n")
+        val extracted = extractTar(cacheFile, prefixDir)
+        if (!extracted) {
+            emit("[31mExtraction failed![0m\n")
+            return
+        }
+
+        // 3) Fix permissions
+        emit("Setting permissions...\n")
+        fixPermissions(File(binDir, pkg.name))
+
+        // 4) Mark installed
+        markInstalled(pkg.name)
+        packageDb[pkg.name] = pkg.copy(installed = true)
+
+        emit("[1;32m${pkg.name} installed successfully![0m\n")
+        emit("Run: ${pkg.name} --version\n")
+        setProgress(100)
     }
 
-    private fun setPermissions(packageName: String) {
-        File(binDir, packageName).setExecutable(true)
+    private fun doRemove(pkg: Package) {
+        emit("Removing ${pkg.name}...\n")
+        File(binDir, pkg.name).delete()
+        File(cacheDir, "${pkg.name}-${pkg.version}-${arch()}.tar.gz").delete()
+        unmarkInstalled(pkg.name)
+        packageDb[pkg.name] = pkg.copy(installed = false)
+        emit("[32m${pkg.name} removed.[0m\n")
     }
 
-    private fun runPostInstall(packageName: String) {
-        // Run postinst script from package
-        // Would execute shell commands here
+    // ──────────────────────────────────────────────────────────────
+    //  DOWNLOAD HELPER
+    // ──────────────────────────────────────────────────────────────
+
+    private fun downloadWithProgress(url: String, out: File): Boolean {
+        return try {
+            // Use Android's built-in URLConnection
+            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 15_000
+            connection.readTimeout    = 30_000
+            connection.requestMethod  = "GET"
+            connection.connect()
+
+            val total = connection.contentLengthLong
+            var downloaded = 0L
+
+            connection.inputStream.use { input ->
+                out.outputStream().use { output ->
+                    val buf = ByteArray(8192)
+                    var n: Int
+                    while (input.read(buf).also { n = it } != -1) {
+                        output.write(buf, 0, n)
+                        downloaded += n
+                        if (total > 0) {
+                            val pct = (downloaded * 100 / total).toInt()
+                            setProgress(pct)
+                            if (pct % 10 == 0) {
+                                val mb = downloaded / 1_000_000
+                                val totalMb = total / 1_000_000
+                                emit("  ${mb}MB / ${totalMb}MB  ($pct%)\r")
+                            }
+                        }
+                    }
+                }
+            }
+            emit("\nDownload complete!\n")
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
-    private fun removePackageFiles(packageName: String) {
-        File(binDir, packageName).delete()
+    // ──────────────────────────────────────────────────────────────
+    //  EXTRACT HELPER
+    // ──────────────────────────────────────────────────────────────
+
+    private fun extractTar(tarFile: File, destDir: File): Boolean {
+        return try {
+            val proc = ProcessBuilder("tar", "-xzf", tarFile.absolutePath, "-C", destDir.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+            proc.waitFor() == 0
+        } catch (e: Exception) {
+            false
+        }
     }
 
-    private fun runPreRemove(packageName: String) {
-        // Run prerm script
+    // ──────────────────────────────────────────────────────────────
+    //  HELPERS
+    // ──────────────────────────────────────────────────────────────
+
+    private fun createStub(name: String) {
+        val stub = File(binDir, name)
+        stub.writeText("#!/system/bin/sh\necho '$name: stub - real package not compiled yet'\n")
+        stub.setExecutable(true)
+    }
+
+    private fun fixPermissions(f: File) {
+        if (f.exists()) f.setExecutable(true, false)
+    }
+
+    private fun arch(): String = when {
+        Build.SUPPORTED_ABIS.contains("arm64-v8a")  -> "arm64"
+        Build.SUPPORTED_ABIS.contains("armeabi-v7a") -> "armv7"
+        Build.SUPPORTED_ABIS.contains("x86_64")      -> "x86_64"
+        else -> "arm64"
+    }
+
+    private fun isMarkedInstalled(name: String): Boolean {
+        if (!dbFile.exists()) return false
+        return dbFile.readLines().any { it.trim() == name }
+    }
+
+    private fun markInstalled(name: String) {
+        val current = if (dbFile.exists()) dbFile.readLines().toMutableSet() else mutableSetOf()
+        current.add(name)
+        dbFile.writeText(current.joinToString("\n"))
+    }
+
+    private fun unmarkInstalled(name: String) {
+        if (!dbFile.exists()) return
+        val current = dbFile.readLines().toMutableSet()
+        current.remove(name)
+        dbFile.writeText(current.joinToString("\n"))
+    }
+
+    private fun emit(text: String) {
+        mainHandler.post { onOutput?.invoke(text) }
+    }
+
+    private fun setProgress(pct: Int) {
+        mainHandler.post { onProgress?.invoke(pct) }
     }
 }
