@@ -1,0 +1,49 @@
+KERNUX PHASE 2 REDESIGN - TERMUX STYLE
+
+USER REQUIREMENT:
+  - Small base APK (100 MB)
+  - No pre-installed packages
+  - Manual download from internet
+  - Online repository
+  - pkg install git -> Downloads from server
+  - Like Termux but BETTER!
+
+NEW ARCHITECTURE:
+  KERNUX-BASE APK (100 MB):
+    - Terminal Emulator: 5 MB
+    - Package Manager: 10 MB
+    - curl/wget (network): 10 MB
+    - Base system: 75 MB
+  
+  ONLINE REPO (kernux.com/packages/):
+    - git-arm64.opkg (15 MB)
+    - python-arm64.opkg (30 MB)
+    - gcc-arm64.opkg (50 MB)
+    - ... 48 total files (all architectures)
+
+PHONE EXPERIENCE:
+  1. Install Kernux (100 MB)
+  2. Open app
+  3. pkg install git
+     -> Downloading git-2.40-arm64.opkg (15 MB)
+     -> Progress: 60% complete
+     -> DONE!
+  4. git clone https://github.com/...
+     -> WORKS!
+
+CODE CHANGES NEEDED:
+  1. PackageManagerPhase2.kt - Add online downloader
+  2. build-all-packages.sh - Separate base + packages
+  3. build-package-repo.sh - Create online repo structure
+  4. Setup kernux.com/packages/ server
+
+BENEFITS vs CURRENT DESIGN:
+  OLD: 500 MB APK (offline)
+  NEW: 100 MB APK + online repo
+  BETTER: 5x smaller download, full flexibility!
+
+TIMELINE:
+  Compile packages: 30-50 hours (same)
+  Build repo: 10 minutes
+  Build base APK: 5 minutes
+  Upload to server: 30 minutes
