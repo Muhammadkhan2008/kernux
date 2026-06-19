@@ -1,61 +1,95 @@
 name: Build Kernux Packages
 
 on:
+  # Weekly auto-build har Sunday 00:00 UTC
   schedule:
-    - cron: '0 0 1 * *'  # Monthly
-  workflow_dispatch:     # Manual trigger
+    - cron: '0 0 * * 0'
+  # Manual trigger
+  workflow_dispatch:
 
 jobs:
   build-packages:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 360  # 6 hours — full build takes 2-5 hours usually
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      
-      - name: Download Android NDK r25b
-        run: |
-          cd ~
-          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-          unzip -q android-ndk-r25b-linux.zip
-          echo "ANDROID_NDK_HOME=$HOME/android-ndk-r25b" >> $GITHUB_ENV
-          export PATH=$HOME/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-      
+
+      - name: Setup Android SDK + NDK
+        uses: android-actions/setup-android@v3
+        with:
+          sdk-platform-tools: true
+          build-tools: 34.0.0
+          platforms: android-34
+          ndk-version: 25.2.9519653
+          cmake-version: 3.22.1
+          add-to-path: true
+
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git wget curl tar gzip
-      
-      - name: Build all packages
+          sudo apt-get install -y build-essential git wget curl tar gzip unzip
+
+      - name: Verify NDK toolchain
         run: |
-          export ANDROID_NDK_HOME=$HOME/android-ndk-r25b
-          export PATH=$HOME/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-          cd $GITHUB_WORKSPACE/phase2-build/scripts
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          ls -la "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/" 2>&1 | head -20
+
+      - name: Build all packages
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          PATH: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin:${{ env.PATH }}
+        run: |
+          cd "$GITHUB_WORKSPACE/phase2-build/scripts"
           chmod +x build-all-packages.sh
-          timeout 120h bash build-all-packages.sh 2>&1 | tee build.log
-      
-      - name: Create release with packages
-        uses: softprops/action-gh-release@v1
+          # 6h hard cap — agar 6h mein complete nahi hua toh fail
+          timeout 21600 bash build-all-packages.sh 2>&1 | tee build.log
+
+      - name: List built packages
+        run: |
+          echo "=== Package files found ==="
+          find "$GITHUB_WORKSPACE/phase2-build/packages/" -type f -name "*.tar.gz" | head -30
+          echo "============================"
+
+      # Upload artifacts (debug ke liye)
+      - name: Upload packages as workflow artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: packages-${{ github.run_number }}
-          name: Kernux Packages Build ${{ github.run_number }}
-          body: |
-            Automated build of all 16 packages for Kernux
-            
-            Packages:
-            - coreutils, bash, curl, wget, git, vim, nano
-            - python, node, gcc, openssh, perl, openssl
-            - net-tools, iputils, make
-            
-            Build timestamp: ${{ github.event.head_commit.timestamp }}
-          files: $GITHUB_WORKSPACE/phase2-build/packages/*.tar.gz
-          draft: false
-          prerelease: false
+          name: kernux-packages-build-${{ github.run_number }}
+          path: phase2-build/packages/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      # IMPORTANT: same tag 'packages-stable' har baar update karo.
+      # Isse PackageManagerPhase2.kt ek stable URL hit kar sakta hai.
+      - name: Update stable release
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: packages-stable
+          name: Kernux Packages (stable)
+          body: |
+            ## Kernux Packages — Stable Build
+
+            Auto-built weekly. ARM64 packages for use with the Kernux terminal app.
+
+            **16 packages:** coreutils, bash, curl, wget, git, vim, nano, python, node, gcc, openssh, perl, openssl, net-tools, iputils, make
+
+            ### Install from the app:
+            ```
+            pkg install git
+            ```
+
+            ### Manual download:
+            Use the assets below. Format: `<name>-<version>-arm64.tar.gz`
+          files: phase2-build/packages/*.tar.gz
+          # overwrite_existing_files taaki same tag pe re-upload ho sake
+          fail_on_unmatched_files: false
