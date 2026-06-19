@@ -48,8 +48,9 @@ class PackageManagerPhase2(private val filesDir: File) {
     var onOutput:   ((String) -> Unit)? = null   // output text show karne ke liye
     var onProgress: ((Int)    -> Unit)? = null   // 0-100 progress bar
 
-    // Package database - 16 packages
+    // Package database - 22 packages (16 base + 6 cyber tools)
     private val packageDb = listOf(
+        // ─── BASE DEVELOPMENT TOOLS ───
         Package("coreutils", "9.1",       "ls, cat, echo, grep, sed, awk, find, sort",  2_500_000),
         Package("bash",      "5.2",       "GNU Bash shell",                              1_800_000),
         Package("curl",      "7.88",      "HTTP/HTTPS file download tool",                 900_000),
@@ -65,7 +66,14 @@ class PackageManagerPhase2(private val filesDir: File) {
         Package("openssl",   "3.0",       "SSL/TLS crypto library",                      3_000_000),
         Package("net-tools", "2.10",      "ifconfig, netstat, arp, route",                 700_000),
         Package("iputils",   "20230321",  "ping, traceroute, arping",                      600_000),
-        Package("make",      "4.3",       "Build automation tool",                       1_000_000)
+        Package("make",      "4.3",       "Build automation tool",                       1_000_000),
+        // ─── CYBER SECURITY & PENETRATION TESTING ───
+        Package("nmap",      "7.94",      "Port scanner - service discovery, OS detection", 4_500_000),
+        Package("tcpdump",   "4.99",      "Packet sniffer - network packet capture",     1_200_000),
+        Package("netcat",    "1.10",      "Network tool - banners, port scans, tunneling", 500_000),
+        Package("john",      "1.9.0",     "Password cracker - hash breaking (MD5,bcrypt)", 2_500_000),
+        Package("gdb",       "13.0",      "Debugger - reverse engineering, binary analysis", 3_000_000),
+        Package("strace",    "6.0",       "System call tracer - program behavior analysis", 800_000)
     ).map { pkg ->
         pkg.copy(installed = isMarkedInstalled(pkg.name))
     }.let { list ->
@@ -110,7 +118,7 @@ class PackageManagerPhase2(private val filesDir: File) {
     /** pkg list */
     fun list(): String {
         val sb = StringBuilder()
-        sb.append("[1;36mKernux Package Repository - 16 Packages Available[0m\n")
+        sb.append("[1;36mKernux Package Repository - 22 Packages (16 Base + 6 Cyber Tools)[0m\n")
         sb.append("─".repeat(55) + "\n")
         sb.append(String.format("%-14s %-10s %-8s %s\n", "NAME", "VERSION", "SIZE", "STATUS"))
         sb.append("─".repeat(55) + "\n")

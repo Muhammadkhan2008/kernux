@@ -1,9 +1,10 @@
 #!/bin/bash
-# Kernux Phase 2 - Build ALL Packages
+# Kernux Phase 2 - Build ALL Packages (Base + Cyber Tools)
 
-source ./cross-compile-env.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/cross-compile-env.sh"
 
-# Package database
+# Package database - BASE PACKAGES
 declare -A PACKAGES=(
   [coreutils]="9.1"
   [bash]="5.1"
@@ -12,6 +13,16 @@ declare -A PACKAGES=(
   [git]="2.38"
   [vim]="9.0"
   [nano]="7.0"
+)
+
+# CYBER SECURITY TOOLS
+CYBER_TOOLS=(
+  "nmap:7.94"
+  "tcpdump:4.99.0"
+  "netcat:1.10-41.1"
+  "john:1.9.0-jumbo-1"
+  "gdb:13.0"
+  "strace:6.0"
 )
 
 URLS=(
@@ -97,7 +108,43 @@ EOF
 done
 
 echo ""
-echo "✓ All packages built successfully!"
+echo "✓ Base packages built successfully!"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BUILD CYBER SECURITY TOOLS
+# ═══════════════════════════════════════════════════════════════════════════
+
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "Building Cyber Security Tools..."
+echo "════════════════════════════════════════════════════════════════"
+
+mkdir -p "$SCRIPT_DIR/../../releases"
+
+for tool in "${CYBER_TOOLS[@]}"; do
+  name="${tool%:*}"
+  version="${tool#*:}"
+
+  # Check if build script exists
+  if [ -f "$SCRIPT_DIR/build-${name}.sh" ]; then
+    echo ""
+    echo "[*] Building $name $version..."
+    bash "$SCRIPT_DIR/build-${name}.sh" "$version" || \
+      echo "[!] Build of $name failed - continuing with next tool"
+  else
+    echo "[!] No build script for $name - skipping"
+  fi
+done
+
+echo ""
+echo "✓ Cyber tools build complete!"
+
+# Copy releases to appropriate location
+if [ -d "$SCRIPT_DIR/../../releases" ]; then
+  echo "[*] Cyber tool packages available in: releases/"
+  ls -lh "$SCRIPT_DIR/../../releases/"*.tar.gz 2>/dev/null | head -10
+fi
+
 echo ""
 echo "Packages ready:"
 ls -lh "$KERNUX_BUILD_ROOT/packages/"*.opkg
