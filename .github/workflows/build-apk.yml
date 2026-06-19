@@ -71,24 +71,18 @@ jobs:
           gradle wrapper --gradle-version 8.2 --distribution-type bin || \
             echo "::warning::Wrapper regeneration failed, using system gradle directly"
 
-      - name: Build Debug APK (use system gradle, fallback to wrapper)
+      - name: Build Debug APK (use project gradlew wrapper)
         run: |
-          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "Using regenerated gradlew wrapper"
-            chmod +x gradlew
-            ./gradlew assembleDebug --stacktrace --no-daemon
-          else
-            echo "Using system gradle directly"
-            gradle assembleDebug --stacktrace --no-daemon
-          fi
-
-      - name: Build Release APK (unsigned)
-        run: |
-          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
-            ./gradlew assembleRelease --stacktrace --no-daemon
-          else
-            gradle assembleRelease --stacktrace --no-daemon
-          fi
+          chmod +x gradlew
+          # -x lintVitalRelease -x lintRelease: skip release lint tasks that are
+          # triggered by setup-gradle's dependency graph feature. Our targetSdk=28
+          # intentionally matches Termux for W^X bypass; lint rule disabled in
+          # build.gradle too, but -x flags ensure CI never waits on lint at all.
+          ./gradlew assembleDebug \
+            -x lintVitalRelease \
+            -x lintRelease \
+            --stacktrace \
+            --no-daemon
 
       - name: List all built APKs
         run: |
@@ -105,15 +99,6 @@ jobs:
           name: kernux-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload Release APK artifact
-        if: hashFiles('app/build/outputs/apk/release/*.apk') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernux-release-apk
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: ignore
           retention-days: 30
 
       - name: Create Release (on tag push only)
