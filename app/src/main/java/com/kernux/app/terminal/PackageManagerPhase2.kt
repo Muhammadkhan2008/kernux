@@ -63,8 +63,20 @@ class PackageManagerPhase2(private val filesDir: File) {
         "make"      to PackageInfo("make",      "4.3",  "Build automation tool",                              1, false)
     )
 
+    // Callbacks — both new API (onProgress/onComplete) and legacy API (onOutput).
+    // The legacy onOutput is kept so old callers (MainActivity/SessionManager) still work.
     var onProgress: ((String) -> Unit)? = null
     var onComplete: ((String, Boolean) -> Unit)? = null
+
+    // Legacy callback — MainActivity/SessionManager attach here.
+    // Routes progress AND completion messages through one channel.
+    var onOutput: ((String) -> Unit)? = null
+        set(value) {
+            field = value
+            // Mirror to onProgress/onComplete so existing UI shows it
+            onProgress = { msg -> value?.invoke(msg) }
+            onComplete = { msg, _ -> value?.invoke(msg) }
+        }
 
     fun installPackage(name: String) {
         executor.execute {
@@ -146,6 +158,66 @@ class PackageManagerPhase2(private val filesDir: File) {
         val installed = getInstalledPackages()
         if (installed.isEmpty()) return "No packages installed yet.\nTry: pkg install git"
         return "Installed (${installed.size}):\n" + installed.joinToString("\n") { "  • $it" }
+    }
+
+    // ─── Legacy API (kept for backwards compat with MainActivity.kt) ───
+
+    /** Synchronous list — returns human-readable formatted string. */
+    fun list(): String = buildString {
+        append("Available packages (${packages.size}):\r\n")
+        append("─────────────────────────────────\r\n")
+        packages.keys.sorted().forEach { name ->
+            val p = packages[name]!!
+            append(String.format("  %-12s %-6s  %s\r\n", name, p.version, p.description))
+        }
+        append("\r\nInstalled:\r\n")
+        val installed = getInstalledPackages()
+        if (installed.isEmpty()) {
+            append("  (none — try: pkg install git)\r\n")
+        } else {
+            installed.forEach { append("  • $it\r\n") }
+        }
+    }
+
+    /** Synchronous install — kicks off async install, output via onOutput. */
+    fun install(name: String) { installPackage(name) }
+
+    /** Synchronous remove — kicks off async uninstall. */
+    fun remove(name: String) { uninstallPackage(name) }
+
+    /** Search — returns formatted string of matches. */
+    fun search(query: String): String {
+        val matches = searchPackage(query)
+        if (matches.isEmpty()) return "No packages match '$query'.\r\n"
+        return "Found ${matches.size} match(es) for '$query':\r\n" +
+               matches.joinToString("\r\n") { "  • $it" } + "\r\n"
+    }
+
+    /** Package info — returns formatted details. */
+    fun info(name: String): String {
+        val p = packages[name] ?: return "Unknown package: $name\r\n"
+        val installed = if (isInstalled(name)) "yes" else "no"
+        return buildString {
+            append("Package:       $name\r\n")
+            append("Version:       ${p.version}\r\n")
+            append("Size:          ~${p.sizeInMb} MB\r\n")
+            append("Pre-installed: ${if (p.preInstalled) "yes" else "no"}\r\n")
+            append("Installed:     $installed\r\n")
+            append("Description:   ${p.description}\r\n")
+            append("Source:        $BASE_URL/${name}-${p.version}.opkg\r\n")
+        }
+    }
+
+    /** Check for upgrades — placeholder (versions are pinned to build artifacts). */
+    fun upgrade(): String {
+        val installed = getInstalledPackages()
+        if (installed.isEmpty()) {
+            return "No packages installed.\r\n"
+        }
+        return "Upgrade check:\r\n" +
+               "All installed packages are at their pinned versions.\r\n" +
+               "Kernux does not currently support in-place upgrades — " +
+               "remove and reinstall to update.\r\n"
     }
 
     // ─── Private helpers ───────────────────────────────────────────────
