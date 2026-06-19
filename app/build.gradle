@@ -35,29 +35,31 @@ android {
     }
 
     // FIX: Multiple dependencies (jakarta.xml.bind, etc) ship duplicate
-    // META-INF/NOTICE.md, .md, LICENSE files. Without this, build fails at
+    // META-INF/{LICENSE,NOTICE}* files. Without this, build fails at
     // mergeDebugJavaResource with DuplicateRelativeFileException.
     packagingOptions {
         resources {
+            // Use excludes for everything in META-INF that ships with multiple deps
             excludes += [
                 'META-INF/DEPENDENCIES',
                 'META-INF/LICENSE',
                 'META-INF/LICENSE.txt',
+                'META-INF/LICENSE.md',
                 'META-INF/license.txt',
+                'META-INF/license.md',
                 'META-INF/NOTICE',
                 'META-INF/NOTICE.txt',
                 'META-INF/NOTICE.md',
                 'META-INF/notice.txt',
                 'META-INF/notice.md',
                 'META-INF/ASL2.0',
-                'META-INF/*.kotlin_module'
+                'META-INF/AL2.0',
+                'META-INF/LGPL2.1',
+                'META-INF/*.kotlin_module',
+                'META-INF/INDEX.LIST',
+                'META-INF/io.netty.versions.properties'
             ]
         }
-        // Keep these consistent across splits
-        pickFirsts += [
-            'META-INF/AL2.0',
-            'META-INF/LGPL2.1'
-        ]
     }
 
     buildTypes {
