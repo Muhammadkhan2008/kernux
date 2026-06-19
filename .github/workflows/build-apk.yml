@@ -50,20 +50,45 @@ jobs:
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           ls -la "$ANDROID_NDK_HOME" 2>/dev/null || echo "NDK dir not found"
 
-      - name: Setup Gradle
+      # IMPORTANT: This repo is MISSING gradle/wrapper/gradle-wrapper.jar, so ./gradlew
+      # fails immediately with "Could not find main class GradleWrapperMain". We use the
+      # system-installed `gradle` from gradle/actions/setup-gradle instead.
+      - name: Setup Gradle (system)
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.2'
           cache-disabled: false
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Verify gradle on PATH
+        run: |
+          which gradle
+          gradle --version
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+      # Try to regenerate the wrapper so the project becomes usable locally too.
+      # If this fails (e.g. no internet), fall through and use system `gradle`.
+      - name: Regenerate gradle wrapper
+        run: |
+          gradle wrapper --gradle-version 8.2 --distribution-type bin || \
+            echo "::warning::Wrapper regeneration failed, using system gradle directly"
+
+      - name: Build Debug APK (use system gradle, fallback to wrapper)
+        run: |
+          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Using regenerated gradlew wrapper"
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace --no-daemon
+          else
+            echo "Using system gradle directly"
+            gradle assembleDebug --stacktrace --no-daemon
+          fi
 
       - name: Build Release APK (unsigned)
-        run: ./gradlew assembleRelease --stacktrace --no-daemon || echo "Release build skipped (no signing config — that's fine for testing)"
+        run: |
+          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            ./gradlew assembleRelease --stacktrace --no-daemon
+          else
+            gradle assembleRelease --stacktrace --no-daemon
+          fi
 
       - name: List all built APKs
         run: |
