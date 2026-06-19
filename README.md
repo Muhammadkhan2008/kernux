@@ -144,24 +144,84 @@ Or open in Android Studio and click Run.
 - Additional packages need Phase 2 bootstrap
 
 ## Roadmap
+## Package System (Phase 2)
 
-### Phase 1 (Current) - DONE
+Kernux can install real Linux tools (git, python, gcc, vim, openssh...) on top of the
+stock Android shell. Packages are prebuilt by GitHub Actions and downloaded at runtime.
+
+### How a package gets onto your phone
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Weekly cron (Sun 00:00 UTC) + manual trigger               │
+│ .github/workflows/build-packages.yml                       │
+│   → cross-compiles 16 packages with Android NDK r25b       │
+│   → bundles each as <pkg>-<version>.opkg                   │
+│   → uploads to GitHub Release tag: packages-stable         │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │  HTTPS download
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Your phone, in the Kernux app:                              │
+│   $ pkg install git                                         │
+│   PackageManagerPhase2.kt fetches from releases URL         │
+│   extracts into filesDir/usr/  (chmod +x on bin/*)          │
+│   records in filesDir/installed-packages.txt                │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+                   $ git clone https://github.com/torvalds/linux
+```
+
+### Available commands
+
+| Command | What it does |
+|---------|--------------|
+| `pkg list`           | Show all 16 available packages |
+| `pkg search <query>` | Search by name |
+| `pkg install <name>` | Download, extract, install |
+| `pkg remove <name>`  | Uninstall |
+| `pkg installed`      | List what's on this device |
+
+### Available packages
+
+`coreutils`, `bash`, `curl`, `wget`, `git`, `vim`, `nano`, `python`, `node`,
+`gcc`, `openssh`, `perl`, `openssl`, `net-tools`, `iputils`, `make`
+
+### Building packages yourself
+
+The full reference is in [`KERNUX_PACKAGES_IMPLEMENTATION.md`](KERNUX_PACKAGES_IMPLEMENTATION.md).
+TL;DR: push a change to main → Actions builds weekly → release gets updated → app picks it up.
+
+Or trigger manually: **Actions tab → Build Kernux Packages → Run workflow**.
+
+### Requirements for the app to use packages
+
+- ARM64 device (most modern phones). x86_64 emulators don't have arm64 packages.
+- minSdk 24+ (Android 7+). Already the app's minimum.
+- Network access on first install (subsequent installs use cache).
+
+## Roadmap
+
+### Phase 1 - DONE ✅
 - Native PTY layer
-- ANSI terminal emulator  
+- ANSI terminal emulator
 - Keyboard input
-- GitHub Actions CI/CD
+- GitHub Actions CI/CD for APK
 
-### Phase 2 (Planned)
-- Cross-compile bash, coreutils
-- Linux userland bootstrap
-- Package manager
-- Emoji support
+### Phase 2 - DONE ✅
+- Cross-compiled 16 packages (arm64) on GitHub Actions
+- Termux-style `pkg install <name>` with GitHub Releases backend
+- Per-user package DB + cache
+- Weekly auto-rebuild
 
-### Phase 3 (Future)
+### Phase 3 - Future
 - Multi-session tabs
 - Clipboard integration
 - SSH support
 - Custom themes
+- x86_64 + armeabi-v7a package builds
 
 ## FAQ
 
