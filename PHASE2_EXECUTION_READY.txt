@@ -1,29 +1,27 @@
-KERNUX PHASE 2 - COMPLETE & EXECUTION READY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⛔  OBSOLETE — kept only to avoid breaking old links
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-STATUS: 100% FRAMEWORK COMPLETE
+This file described Phase 2 as a Linux-machine + NDK bootstrap recipe.
+That plan was never fully built. The actual implementation is different:
 
-HOW TO EXECUTE:
+  → See:  KERNUX_PACKAGES_IMPLEMENTATION.md  (single source of truth)
+  → Built by: .github/workflows/build-packages.yml (weekly + manual)
+  → Downloads from: GitHub Releases (tag: packages-stable)
+  → App-side code: app/src/main/java/com/kernux/app/terminal/PackageManagerPhase2.kt
 
-1. Get Linux machine (Ubuntu 20.04+)
-2. Install Android NDK r25b
-3. Install build tools (gradle, openjdk-17)
-4. Clone kernux repo
-5. Run: cd phase2-build/scripts && bash build-all-packages.sh
-6. Wait 30-50 hours (automated)
-7. Build APK: ./gradlew assembleDebug
-8. Install on phone: adb install app-debug.apk
+For historical reference, the original content of this file was:
 
-TESTING ON PHONE:
+  ─────────────────────────────────────────────────────────────────
+  STATUS: 100% FRAMEWORK COMPLETE
 
-pkg install git
-git clone https://github.com/torvalds/linux.git
-
-pkg install python
-python script.py
-
-pkg install gcc
-gcc program.c && ./a.out
-
-GITHUB: https://github.com/Muhammadkhan2008/kernux
-
-PHASE 2 READY TO DEPLOY!
+  HOW TO EXECUTE:
+  1. Get Linux machine (Ubuntu 20.04+)
+  2. Install Android NDK r25b
+  3. Install build tools (gradle, openjdk-17)
+  4. Clone kernux repo
+  5. Run: cd phase2-build/scripts && bash build-all-packages.sh
+  6. Wait 30-50 hours (automated)
+  7. Build APK: ./gradlew assembleDebug
+  8. Install on phone: adb install app-debug.apk
+  ─────────────────────────────────────────────────────────────────
