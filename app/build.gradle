@@ -48,7 +48,17 @@ android {
     }
 }
 
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += [
+        '-Xlint:-processing'
+    ]
+}
+
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'androidx.core:core-ktx:1.12.0'
+
+    // JAXB API for Java 17+ compatibility (javax/xml/bind/annotation/XmlSchema)
+    implementation 'javax.xml.bind:jaxb-api:2.4.0-b180830.0359'
+    runtimeOnly 'com.sun.xml.bind:jaxb-impl:4.0.3'
 }
