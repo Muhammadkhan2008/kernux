@@ -56,7 +56,7 @@ class TerminalView @JvmOverloads constructor(
             val cellH = textPaint.textSize + 8f
             for (r in 0 until rows) {
                 for (c in 0 until cols) {
-                    val ch = emu.charAt(r, c)
+                    val ch = emu.screen[r][c].ch
                     if (ch != ' ' && ch != '\u0000') {
                         val x = c * cellW + 4f
                         val y = r * cellH + textPaint.textSize
@@ -65,8 +65,8 @@ class TerminalView @JvmOverloads constructor(
                 }
             }
             // cursor
-            val cx = emu.cursorX * cellW + 4f
-            val cy = emu.cursorY * cellH
+            val cx = emu.cursorCol * cellW + 4f
+            val cy = emu.cursorRow * cellH
             canvas.drawRect(cx, cy - 4f, cx + cellW * 0.8f, cy + cellH, textPaint)
         }
     }
