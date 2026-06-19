@@ -1,0 +1,4 @@
+# Ensure gradlew always has LF line endings, never CRLF
+# (CRLF would break shebang execution on Linux CI runners)
+gradlew text eol=lf
+*.jar binary
