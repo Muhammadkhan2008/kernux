@@ -71,18 +71,10 @@ jobs:
           gradle wrapper --gradle-version 8.2 --distribution-type bin || \
             echo "::warning::Wrapper regeneration failed, using system gradle directly"
 
-      - name: Build Debug APK (use project gradlew wrapper)
+      - name: Build Debug APK
         run: |
           chmod +x gradlew
-          # -x lintVitalRelease -x lintRelease: skip release lint tasks that are
-          # triggered by setup-gradle's dependency graph feature. Our targetSdk=28
-          # intentionally matches Termux for W^X bypass; lint rule disabled in
-          # build.gradle too, but -x flags ensure CI never waits on lint at all.
-          ./gradlew assembleDebug \
-            -x lintVitalRelease \
-            -x lintRelease \
-            --stacktrace \
-            --no-daemon
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: List all built APKs
         run: |
