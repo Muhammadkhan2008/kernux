@@ -139,7 +139,7 @@ class BootstrapInstaller(
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
-        handler.post { onLog(msg + "
+        handler.post { onLog("$msg
 ") }
     }
 }
