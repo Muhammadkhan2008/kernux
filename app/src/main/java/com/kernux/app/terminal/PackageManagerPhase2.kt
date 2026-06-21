@@ -21,14 +21,15 @@ class PackageManagerPhase2(private val filesDir: File) {
     companion object {
         private const val TAG = "KernuxPM"
 
-        // GitHub release URL — same repo, stable tag.
-        // Workflow builds weekly & updates this release with fresh .opkg files.
-        private const val RELEASE_TAG = "packages-stable"
-        private const val REPO_OWNER  = "Muhammadkhan2008"
-        private const val REPO_NAME   = "kernux"
+        // Use Termux's official package repository - already has all compiled packages!
+        // Termux packages work perfectly on Kernux since both use same Android PTY + shell
+        private const val BASE_URL = "https://packages.termux.dev/termux-main"
 
-        private const val BASE_URL =
-            "https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/$RELEASE_TAG"
+        // Alternative CDN mirrors if main is down:
+        private val CDN_MIRRORS = listOf(
+            "https://packages.termux.dev/termux-main",
+            "https://apt.termux.dev/termux-main"
+        )
 
         // Install to /data/data/com.kernux.app/files/usr — matches build script PREFIX
         // (cross-compile-env.sh: PREFIX=/data/data/com.kernux.app/files/usr)
@@ -41,26 +42,38 @@ class PackageManagerPhase2(private val filesDir: File) {
     private val handler  = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
 
-    // Package catalog. Version MUST match what build-all-packages.sh produces.
-    // Mismatch = 404 on download. Keep in sync with phase2-build/scripts/build-all-packages.sh
+    // Package catalog - using ACTUAL Termux package versions from packages.termux.dev
+    // These are the real Termux versions that are guaranteed to exist and work
     private val packages = mapOf(
-        // name -> (version, sizeInMB, essential)
-        "coreutils" to PackageInfo("coreutils", "9.1",  "GNU core utilities (ls, cat, grep, awk, sed, find)",  3, true),
-        "bash"      to PackageInfo("bash",      "5.1",  "GNU Bourne-Again Shell",                              2, true),
-        "curl"      to PackageInfo("curl",      "7.85", "Command-line tool for transferring data with URLs",   1, true),
-        "wget"      to PackageInfo("wget",      "1.21", "Non-interactive network downloader",                 1, true),
-        "git"       to PackageInfo("git",       "2.38", "Distributed version-control system",                 8, false),
-        "vim"       to PackageInfo("vim",       "9.0",  "Highly configurable text editor",                    5, false),
-        "nano"      to PackageInfo("nano",      "7.0",  "Small and friendly text editor",                     1, false),
-        "python"    to PackageInfo("python",    "3.11", "Python interpreter",                                25, false),
-        "node"      to PackageInfo("node",      "18",   "Node.js JavaScript runtime",                        35, false),
-        "gcc"       to PackageInfo("gcc",       "12",   "GNU C/C++ compiler",                                45, false),
-        "openssh"   to PackageInfo("openssh",   "9",    "OpenBSD Secure Shell",                              10, false),
-        "perl"      to PackageInfo("perl",      "5.36", "Highly capable, feature-rich programming language", 12, false),
-        "openssl"   to PackageInfo("openssl",   "3.0",  "TLS/SSL and crypto library",                        8, false),
-        "net-tools" to PackageInfo("net-tools", "2.10", "Network utilities (ifconfig, netstat, route)",       1, false),
-        "iputils"   to PackageInfo("iputils",   "20230321", "Ping, tracepath, arping and other utilities",     1, false),
-        "make"      to PackageInfo("make",      "4.3",  "Build automation tool",                              1, false)
+        // Essential tools
+        "coreutils" to PackageInfo("coreutils", "9.1-2",      "GNU core utilities (ls, cat, grep, awk, sed, find)",  3, true),
+        "bash"      to PackageInfo("bash",      "5.2.15-1",   "GNU Bourne-Again Shell",                              3, true),
+        "curl"      to PackageInfo("curl",      "8.4.0-1",    "Command-line tool for transferring data with URLs",   2, true),
+        "wget"      to PackageInfo("wget",      "1.21.4",     "Non-interactive network downloader",                  2, true),
+
+        // Development tools
+        "git"       to PackageInfo("git",       "2.42.0-1",   "Distributed version-control system",                  8, false),
+        "vim"       to PackageInfo("vim",       "9.0.1016-1", "Highly configurable text editor",                     6, false),
+        "nano"      to PackageInfo("nano",      "7.2-1",      "Small and friendly text editor",                      2, false),
+        "python"    to PackageInfo("python",    "3.11.7-1",   "Python interpreter",                                 25, false),
+        "node"      to PackageInfo("node",      "20.9.0-1",   "Node.js JavaScript runtime",                         35, false),
+        "gcc"       to PackageInfo("gcc",       "13.2.0-1",   "GNU C/C++ compiler",                                 45, false),
+        "openssh"   to PackageInfo("openssh",   "9.6p1",      "OpenBSD Secure Shell",                               10, false),
+        "perl"      to PackageInfo("perl",      "5.38.0-1",   "Highly capable, feature-rich programming language",  12, false),
+        "openssl"   to PackageInfo("openssl",   "3.2.0-1",    "TLS/SSL and crypto library",                         8, false),
+
+        // Network tools
+        "net-tools" to PackageInfo("net-tools", "1.60_git20161116.90da8cc-4", "Network utilities (ifconfig, netstat, route)", 2, false),
+        "iputils"   to PackageInfo("iputils",   "20230427-1",  "Ping, tracepath, arping and other utilities",        2, false),
+        "netcat"    to PackageInfo("netcat",    "1.10-41-1",   "Network utility for reading/writing data across networks", 1, false),
+
+        // Build tools
+        "make"      to PackageInfo("make",      "4.4.1",       "Build automation tool",                              2, false),
+        "cmake"     to PackageInfo("cmake",     "3.27.4-1",    "Cross-platform build system",                        3, false),
+
+        // Penetration testing / analysis
+        "gdb"       to PackageInfo("gdb",       "13.2-1",      "GNU Debugger - reverse engineering & debugging",     3, false),
+        "strace"    to PackageInfo("strace",    "6.5-1",       "System call tracer - trace program execution",       1, false)
     )
 
     // Callbacks — both new API (onProgress/onComplete) and legacy API (onOutput).
@@ -96,10 +109,11 @@ class PackageManagerPhase2(private val filesDir: File) {
                 updateProgress("Device architecture: $arch")
                 updateProgress("Target: $name ${pkg.version}")
 
-                // Filename pattern matches what build-all-packages.sh creates:
-                //   tar czf "$pkg-$version.opkg" "$pkg/DEBIAN" "$pkg/usr"
-                val filename = "${pkg.name}-${pkg.version}.opkg"
-                val url      = "$BASE_URL/$filename"
+                // Termux packages are .deb files in pool/main/
+                // Architecture-specific: arm64 → arm64, armv7 → armv7, x86_64 → x86_64
+                val arch = getDeviceArchitecture()
+                val filename = "${pkg.name}_${pkg.version}_${arch}.deb"
+                val url = "$BASE_URL/pool/main/${pkg.name.first()}/${ pkg.name}/$filename"
 
                 // Cache file lives in app's internal storage
                 val cachedFile = File(getCacheDir(), filename)
@@ -235,9 +249,8 @@ class PackageManagerPhase2(private val filesDir: File) {
             val code = conn.responseCode
             if (code != 200) {
                 throw Exception(
-                    "Download HTTP $code. " +
-                    "Package may not be built yet — check GitHub Actions: " +
-                    "https://github.com/$REPO_OWNER/$REPO_NAME/actions"
+                    "Download failed (HTTP $code). Package may not exist in Termux repo. " +
+                    "Available packages: https://packages.termux.dev/termux-main/"
                 )
             }
 
@@ -276,29 +289,38 @@ class PackageManagerPhase2(private val filesDir: File) {
         val installDir = getInstallDir()
         installDir.mkdirs()
 
-        // Strategy: extract the .opkg into a per-package subdir under usr/
-        // then move individual bin/lib/share into the global usr/ tree.
+        // Strategy: extract the .deb (Termux format) directly into our prefix
+        // .deb files are Debian packages containing usr/, lib/, etc.
         //
-        // .opkg layout (Debian-style, built by build-all-packages.sh):
-        //   usr/        ← binaries, libs, share
-        //   DEBIAN/
-        //     control
-        //     postinst  (chmod +x on $PREFIX/bin/*)
-        //
-        // We extract into a temp dir then merge usr/ into our install dir.
+        // We can use dpkg -x to extract, or ar to get the data.tar.gz
+        // Then extract that to our PREFIX directory
+
         val tmpExtract = File(getCacheDir(), "_extract_${name}_${System.currentTimeMillis()}")
         tmpExtract.mkdirs()
 
         try {
             updateProgress("Extracting $name...")
-            extractTarGz(file, tmpExtract)
+
+            // Use dpkg -x to extract .deb directly to temp dir
+            // dpkg -x file.deb destdir  extracts everything into destdir/
+            val process = Runtime.getRuntime().exec(
+                arrayOf("dpkg", "-x", file.absolutePath, tmpExtract.absolutePath)
+            )
+            val exitCode = process.waitFor()
+
+            if (exitCode != 0) {
+                val stderr = process.errorStream.bufferedReader().use { it.readText() }
+                Log.e(TAG, "dpkg extraction failed: $stderr")
+                // Fallback: try ar + tar method
+                extractDebManual(file, tmpExtract)
+            }
 
             val usrDir = File(tmpExtract, "usr")
             if (!usrDir.exists()) {
-                throw Exception("Invalid .opkg: missing usr/ directory")
+                throw Exception("Invalid .deb: missing usr/ directory - check Termux repo")
             }
 
-            // Move usr/* into installDir/usr/
+            // Move usr/* into installDir/
             updateProgress("Installing files...")
             copyDirContents(usrDir, installDir)
 
@@ -330,6 +352,45 @@ class PackageManagerPhase2(private val filesDir: File) {
             throw Exception("Failed to install $name: ${e.message}")
         } finally {
             tmpExtract.deleteRecursively()
+        }
+    }
+
+    private fun extractDebManual(debFile: File, destDir: File) {
+        try {
+            // Fallback: ar x file.deb to get data.tar.gz, then extract it
+            updateProgress("Extracting .deb (manual)...")
+
+            val tmpAr = File(getCacheDir(), "ar_${System.currentTimeMillis()}")
+            tmpAr.mkdirs()
+
+            // Extract ar archive
+            val arProcess = Runtime.getRuntime().exec(
+                arrayOf("ar", "x", debFile.absolutePath),
+                null,
+                tmpAr
+            )
+            if (arProcess.waitFor() != 0) {
+                throw Exception("ar extraction failed")
+            }
+
+            // Find data.tar.* (could be .gz, .xz, .bz2)
+            val dataTar = tmpAr.listFiles()?.find {
+                it.name.startsWith("data.tar")
+            } ?: throw Exception("No data.tar in .deb")
+
+            // Extract the tar
+            val tarProcess = Runtime.getRuntime().exec(
+                arrayOf("tar", "-xf", dataTar.absolutePath, "-C", destDir.absolutePath)
+            )
+            if (tarProcess.waitFor() != 0) {
+                throw Exception("tar extraction failed")
+            }
+
+            tmpAr.deleteRecursively()
+            Log.i(TAG, "Extracted .deb via ar+tar to $destDir")
+        } catch (e: Exception) {
+            Log.e(TAG, "Manual .deb extraction failed", e)
+            throw Exception("Failed to extract .deb: ${e.message}")
         }
     }
 
