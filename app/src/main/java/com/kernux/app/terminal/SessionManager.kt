@@ -26,7 +26,7 @@ class SessionManager(val filesDir: File) {
         val env = arrayOf(
             "HOME=$home",
             "PREFIX=$prefix",
-            "PATH=$binDir:$prefix/local/bin:/system/bin:/system/xbin:/system/bin/sh",
+            "PATH=$binDir:$prefix/local/bin:/system/bin:/system/xbin",
             "TERM=xterm-256color",
             "LANG=en_US.UTF-8",
             "SHELL=/system/bin/sh",
@@ -36,7 +36,9 @@ class SessionManager(val filesDir: File) {
             "PS2=> "
         )
 
-        val shell = "/system/bin/sh"
+        // Use bootstrap bash if available, else fallback to Android sh
+        val bash = File(filesDir, "usr/bin/bash")
+        val shell = if (bash.exists() && bash.canExecute()) bash.absolutePath else "/system/bin/sh"
         val args  = arrayOf(shell, "-i")
 
         val session = TerminalSession(shell, args, env, home)

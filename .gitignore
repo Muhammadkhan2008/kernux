@@ -25,3 +25,5 @@ cmake_build/
 
 # Kotlin
 *.kt.bak
+bash.exe.stackdump
+*.stackdump
