@@ -72,8 +72,12 @@ class TerminalView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_DOWN) requestFocus()
-        return super.onTouchEvent(event)
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            requestFocus()
+            // Show soft keyboard immediately on tap
+            showKeyboard()
+        }
+        return true
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -99,8 +103,26 @@ class TerminalView @JvmOverloads constructor(
             KeyEvent.KEYCODE_DPAD_DOWN  -> { s.write("\u001b[B"); true }
             KeyEvent.KEYCODE_DPAD_RIGHT -> { s.write("\u001b[C"); true }
             KeyEvent.KEYCODE_DPAD_LEFT  -> { s.write("\u001b[D"); true }
-            KeyEvent.KEYCODE_TAB        -> { s.write("\t");         true }
-            else -> false
+            KeyEvent.KEYCODE_TAB        -> { s.write("\t"); invalidate(); true }
+            KeyEvent.KEYCODE_SPACE      -> {
+                inputBuffer.append(' ')
+                s.write(" ")
+                invalidate()
+                true
+            }
+            else -> {
+                // Handle all printable characters from soft keyboard
+                val c = event.unicodeChar
+                if (c > 0 && c != 0xffff) {
+                    val ch = c.toChar()
+                    inputBuffer.append(ch)
+                    s.write(ch.toString())
+                    invalidate()
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 

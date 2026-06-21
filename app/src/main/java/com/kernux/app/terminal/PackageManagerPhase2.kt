@@ -290,46 +290,103 @@ class PackageManagerPhase2(private val filesDir: File) {
         tmpExtract.mkdirs()
 
         try {
+            updateProgress("Extracting $name...")
             extractTarGz(file, tmpExtract)
+
             val usrDir = File(tmpExtract, "usr")
             if (!usrDir.exists()) {
                 throw Exception("Invalid .opkg: missing usr/ directory")
             }
 
             // Move usr/* into installDir/usr/
+            updateProgress("Installing files...")
             copyDirContents(usrDir, installDir)
 
             // Run postinst-equivalent: ensure binaries are executable
             val binDir = File(installDir, "bin")
             if (binDir.exists()) {
+                updateProgress("Setting permissions...")
                 binDir.listFiles()?.forEach { f ->
-                    if (f.isFile) f.setExecutable(true, false)
+                    if (f.isFile) {
+                        f.setExecutable(true, false)
+                        f.setReadable(true, false)
+                        f.setWritable(true, false)
+                    }
                 }
             }
+
+            // Also set executable on lib files if needed
+            val libDir = File(installDir, "lib")
+            if (libDir.exists()) {
+                libDir.listFiles()?.forEach { f ->
+                    if (f.isFile && f.name.endsWith(".so")) {
+                        f.setExecutable(true, false)
+                        f.setReadable(true, false)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Install package file failed", e)
+            throw Exception("Failed to install $name: ${e.message}")
         } finally {
             tmpExtract.deleteRecursively()
         }
     }
 
     private fun extractTarGz(archive: File, destDir: File) {
-        // Use Android's built-in tar via Runtime since java.util doesn't have tar.gz support.
-        // App is shell-capable via forkpty, so this works.
-        val process = Runtime.getRuntime().exec(
-            arrayOf("tar", "-xzf", archive.absolutePath, "-C", destDir.absolutePath)
-        )
-        val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            val stderr = process.errorStream.bufferedReader().readText()
-            throw Exception("tar extract failed (exit=$exitCode): $stderr")
+        try {
+            // Use Android's built-in tar via Runtime
+            updateProgress("Decompressing archive...")
+
+            val process = Runtime.getRuntime().exec(
+                arrayOf("tar", "-xzf", archive.absolutePath, "-C", destDir.absolutePath)
+            )
+
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                val stderr = process.errorStream.bufferedReader().use { it.readText() }
+                val stdout = process.inputStream.bufferedReader().use { it.readText() }
+                Log.e(TAG, "tar failed - exit=$exitCode")
+                Log.e(TAG, "stderr: $stderr")
+                Log.e(TAG, "stdout: $stdout")
+                throw Exception("tar extract failed (exit=$exitCode)")
+            }
+
+            Log.i(TAG, "Extracted ${archive.name} to $destDir")
+        } catch (e: Exception) {
+            Log.e(TAG, "Extract failed", e)
+            throw Exception("Failed to extract archive: ${e.message}")
         }
     }
 
     private fun copyDirContents(src: File, dst: File) {
-        dst.mkdirs()
-        src.listFiles()?.forEach { child ->
-            val target = File(dst, child.name)
-            if (child.isDirectory) copyDirContents(child, target)
-            else child.copyTo(target, overwrite = true)
+        try {
+            dst.mkdirs()
+            dst.setReadable(true, false)
+            dst.setWritable(true, false)
+            dst.setExecutable(true, false)
+
+            src.listFiles()?.forEach { child ->
+                val target = File(dst, child.name)
+                if (child.isDirectory) {
+                    copyDirContents(child, target)
+                } else {
+                    try {
+                        child.copyTo(target, overwrite = true)
+                        // Copy file permissions
+                        if (child.canExecute()) {
+                            target.setExecutable(true, false)
+                        }
+                        target.setReadable(true, false)
+                        target.setWritable(true, false)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to copy ${child.name}: ${e.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Copy directory failed: $src -> $dst", e)
+            throw Exception("Failed to copy files: ${e.message}")
         }
     }
 
@@ -353,8 +410,19 @@ class PackageManagerPhase2(private val filesDir: File) {
         File(filesDir, DB_FILE).writeText(current.joinToString("\n") { "$it|" })
     }
 
-    private fun getCacheDir()    = File(filesDir, CACHE_DIR).apply { mkdirs() }
-    private fun getInstallDir()  = File(filesDir, PREFIX_SUBDIR)
+    private fun getCacheDir() = File(filesDir, CACHE_DIR).apply {
+        mkdirs()
+        setReadable(true, false)
+        setWritable(true, false)
+        setExecutable(true, false)
+    }
+
+    private fun getInstallDir() = File(filesDir, PREFIX_SUBDIR).apply {
+        mkdirs()
+        setReadable(true, false)
+        setWritable(true, false)
+        setExecutable(true, false)
+    }
 
     private fun getDeviceArchitecture(): String {
         val abis = Build.SUPPORTED_ABIS ?: emptyArray()
