@@ -71,36 +71,8 @@ class MainActivity : AppCompatActivity() {
         session.start()
 
         val hasBootstrap = bootstrap.isInstalled
-        val welcome = buildString {
-            append("
-[1;32m")
-            append("  _  __                       
-")
-            append(" | |/ / ___ _ __ _ __  _   _ _  __
-")
-            append(" | ' / / _ \'| '__| '_ \| | | \/ /
-")
-            append(" | . \| __/| |  | | | | |_| |>  <
-")
-            append(" |_|\_\___|_|  |_| |_|\__,_/_/\_\
-")
-            append("[0m
-")
-            append("[1;33m Kernux Terminal v2.0[0m
-")
-            if (hasBootstrap) {
-                append(" [32mBootstrap: READY[0m - Full Linux environment active
-")
-                append(" Type [32mpkg install git[0m to install packages
-")
-            } else {
-                append(" [33mBasic mode[0m - run: pkg setup  to get full Linux env
-")
-            }
-            append("
-")
-        }
-        printToTerminal(welcome)
+        val boot = if (hasBootstrap) "Bootstrap: READY" else "Basic mode - type: pkg setup"
+        session.write(byteArrayOf(0x4B,0x65,0x72,0x6E,0x75,0x78,0x20,0x54,0x65,0x72,0x6D,0x69,0x6E,0x61,0x6C,0x20,0x76,0x32,0x2E,0x30,0x0D,0x0A))
     }
 
     private fun printToTerminal(text: String) {
