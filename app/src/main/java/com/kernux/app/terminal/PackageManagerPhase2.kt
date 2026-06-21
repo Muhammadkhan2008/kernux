@@ -111,9 +111,8 @@ class PackageManagerPhase2(private val filesDir: File) {
 
                 // Termux packages are .deb files in pool/main/
                 // Architecture-specific: arm64 → arm64, armv7 → armv7, x86_64 → x86_64
-                val arch = getDeviceArchitecture()
                 val filename = "${pkg.name}_${pkg.version}_${arch}.deb"
-                val url = "$BASE_URL/pool/main/${pkg.name.first()}/${ pkg.name}/$filename"
+                val url = "$BASE_URL/pool/main/${pkg.name.first()}/${pkg.name}/$filename"
 
                 // Cache file lives in app's internal storage
                 val cachedFile = File(getCacheDir(), filename)
